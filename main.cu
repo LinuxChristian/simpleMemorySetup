@@ -23,7 +23,7 @@
 // Prototypes
 void checkForCudaErrors(const char* checkpoint_description);
 void initializeGPU();
-__global__ void cuLoadStoreElement(real *M_in, real *M_out);
+__global__ void cuLoadStoreElement(real *M_in, real *M_out, int StoreMat);
 
 int main(int argc, char* argv[])
 {
@@ -45,14 +45,16 @@ int main(int argc, char* argv[])
   real *d_Matin;  // Device pointer to input array
   real *d_Matout; // Device pointer to input array
   Mat = (real*) calloc(xDim, sizeof(real));  // Host memory
-  cudaMalloc( (void**) &d_Matin , xDim );    // Device memory
-  cudaMalloc( (void**) &d_Matout, xDim );    // Device memory
+  cudaMalloc( (void**) &d_Matin , xDim*sizeof(real) );    // Device memory
+  cudaMalloc( (void**) &d_Matout, xDim*sizeof(real) );    // Device memory
   
   printf("Memory copy Host -> Device \n");
   cudaMemcpy( d_Matin, Mat,  xDim, cudaMemcpyHostToDevice );
   checkForCudaErrors("Test 1 - Memcpy.");
 
-  cuLoadStoreElement<<<BlockSize, GridSize>>>(d_Matin, d_Matout);
+  cudaProfilerStart();
+  cuLoadStoreElement<<<BlockSize, GridSize>>>(d_Matin, d_Matout, 0);
+  cudaProfilerStop();
   checkForCudaErrors("Test 1 - Kernel call.");
 
   printf("Clean up \n");
@@ -71,10 +73,35 @@ int main(int argc, char* argv[])
  * 
  * M_in  Pointer to input matrix
  * M_out Pointer to output matrix
+ * StoreMat Bool if value should be stores
  */
-__global__ void cuLoadStoreElement(real *M_in, real *M_out) {
+
+__global__ void cuLoadStoreElement(real *M_in, real *M_out, int StoreMat) {
+  
+  int tx = threadIdx.x;   int ty = threadIdx.y;
+  int bx = blockIdx.x;    int by = blockIdx.y;
+  
+  int Ix = bx * blockDim.x + tx;
+  int Iy = by * blockDim.y + ty;
+
+  real ValIn = M_in[Ix];
+
+  // Avoid compiler optimization if
+  // no store request is given
+  if ( 0 == ValIn*StoreMat ) {
+    M_out[Ix] = (double) 5.0;// ValIn;
+  };
 
 };
+
+
+//-------------------------------------------------------
+// 
+// BELOW ARE CUDA SPECIFIC FUNCTION TO HELP WITH ERROR
+// HANDLING AND DEVICE SELECTION.
+//
+//-------------------------------------------------------
+
 
 /**
  // Check for cuda errors

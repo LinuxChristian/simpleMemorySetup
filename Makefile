@@ -1,4 +1,5 @@
 NVCC = nvcc
+NVCCFLAGS = -gencode arch=compute_20,code=sm_20
 
 all:
-	$(NVCC) main.cu -o main
+	$(NVCC) $(NVCCFLAGS) main.cu -o main
