@@ -17,18 +17,23 @@
 ################################################################# */
 
 #include <stdio.h>
+#include <cuda_profiler_api.h> // CUDA 5.0 Profiler API
 #define real double // Define the precision
 
 // Prototypes
 void checkForCudaErrors(const char* checkpoint_description);
 void initializeGPU();
+__global__ void cuLoadStoreElement(real *M_in, real *M_out);
 
 int main(int argc, char* argv[])
 {
 
   int xDim = 500; // Node count in x dimension
-  int yDim = 500; // Node count in y dimension
+  int yDim = 1; // Node count in y dimension
+  dim3 BlockSize( 16, 1, 1);
+  dim3 GridSize(int(xDim/BlockSize.x), 1, 1);
 
+  
   initializeGPU();
 
   // 
@@ -36,20 +41,25 @@ int main(int argc, char* argv[])
   // Linear test
   //
 
-  real *Mat;   // Host pointer
-  real *d_Mat; // Device pointer
+  real *Mat;      // Host pointer
+  real *d_Matin;  // Device pointer to input array
+  real *d_Matout; // Device pointer to input array
   Mat = (real*) calloc(xDim, sizeof(real));  // Host memory
-  cudaMalloc( (void**) &d_Mat, xDim );       // Device memory
+  cudaMalloc( (void**) &d_Matin , xDim );    // Device memory
+  cudaMalloc( (void**) &d_Matout, xDim );    // Device memory
   
   printf("Memory copy Host -> Device \n");
-  cudaMemcpy( d_Mat,   Mat,  xDim, cudaMemcpyHostToDevice );
-  checkForCudaErrors("Post test 1 memcpy.");
+  cudaMemcpy( d_Matin, Mat,  xDim, cudaMemcpyHostToDevice );
+  checkForCudaErrors("Test 1 - Memcpy.");
+
+  cuLoadStoreElement<<<BlockSize, GridSize>>>(d_Matin, d_Matout);
+  checkForCudaErrors("Test 1 - Kernel call.");
 
   printf("Clean up \n");
   free( Mat );
-  cudaFree( d_Mat );
+  cudaFree( d_Matin  );
+  cudaFree( d_Matout );
 
-  
   printf("All done");
   return 0;
 };
@@ -112,6 +122,11 @@ void initializeGPU()
     cudaDriverGetVersion(&cudaDriverVersion);
     cudaRuntimeGetVersion(&cudaRuntimeVersion);
     checkForCudaErrors("Initializing GPU!");
+    
+    if (cudaRuntimeVersion < 5000) {
+      printf("The demo needs CUDA version 5.0 or greater to run!");
+      exit(EXIT_FAILURE);
+    };
 
     printf("Using CUDA device ID: %i \n",(cudadevice));
     printf("  - Name: %s, compute capability: %i.%i.\n",prop.name,prop.major,prop.minor);
