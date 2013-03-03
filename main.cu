@@ -18,21 +18,27 @@
 
 #include <stdio.h>
 #include <cuda_profiler_api.h> // CUDA 5.0 Profiler API
-#define real double // Define the precision
+#include "cuPrintf.cu"
+#define real double  // Define the precision
 
 // Prototypes
 void checkForCudaErrors(const char* checkpoint_description);
 void initializeGPU();
-__global__ void cuLoadStoreElement(real *M_in, real *M_out, int StoreMat);
+__global__ void cuLoadStoreElement(real *M_in, real *M_out, int StoreMat, int offset);
 
 int main(int argc, char* argv[])
 {
 
-  int xDim = 500; // Node count in x dimension
+  int xDim = 4096; // Node count in x dimension
   int yDim = 1; // Node count in y dimension
-  dim3 BlockSize( 16, 1, 1);
-  dim3 GridSize(int(xDim/BlockSize.x), 1, 1);
+  dim3 BlockSize( 128, 1, 1);
+  dim3 GridSize( 1, 1, 1);
+  int offset = 0;
 
+  if (argc > 0) {
+    offset = atoi(argv[1]);
+  };
+  
   
   initializeGPU();
 
@@ -45,23 +51,31 @@ int main(int argc, char* argv[])
   real *d_Matin;  // Device pointer to input array
   real *d_Matout; // Device pointer to input array
   Mat = (real*) calloc(xDim, sizeof(real));  // Host memory
-  cudaMalloc( (void**) &d_Matin , xDim*sizeof(real) );    // Device memory
-  cudaMalloc( (void**) &d_Matout, xDim*sizeof(real) );    // Device memory
-  
+  cudaMalloc( (void**) &d_Matin , xDim*yDim*sizeof(real) );    // Device memory
+  cudaMalloc( (void**) &d_Matout, xDim*yDim*sizeof(real) );    // Device memory
+  checkForCudaErrors("Test 1 - Memory alloc.");
+
   printf("Memory copy Host -> Device \n");
-  cudaMemcpy( d_Matin, Mat,  xDim, cudaMemcpyHostToDevice );
+  //  cudaMemcpy( d_Matin, Mat,  xDim, cudaMemcpyHostToDevice );
   checkForCudaErrors("Test 1 - Memcpy.");
 
+  cudaPrintfInit();
+
   cudaProfilerStart();
-  cuLoadStoreElement<<<BlockSize, GridSize>>>(d_Matin, d_Matout, 0);
+  cuLoadStoreElement<<<GridSize, BlockSize>>>(d_Matin, d_Matout, 0, offset);
   cudaProfilerStop();
   checkForCudaErrors("Test 1 - Kernel call.");
+
+
+  cudaDeviceSynchronize();
+  cudaPrintfDisplay(stdout, true);
 
   printf("Clean up \n");
   free( Mat );
   cudaFree( d_Matin  );
   cudaFree( d_Matout );
 
+  cudaPrintfEnd();
   printf("All done");
   return 0;
 };
@@ -76,22 +90,34 @@ int main(int argc, char* argv[])
  * StoreMat Bool if value should be stores
  */
 
-__global__ void cuLoadStoreElement(real *M_in, real *M_out, int StoreMat) {
+__global__ void cuLoadStoreElement(real *M_in, real *M_out, int StoreMat, int offset) {
   
   int tx = threadIdx.x;   int ty = threadIdx.y;
   int bx = blockIdx.x;    int by = blockIdx.y;
-  
+  int GridWidth = gridDim.x*gridDim.y;
+
   int Ix = bx * blockDim.x + tx;
   int Iy = by * blockDim.y + ty;
 
-  real ValIn = M_in[Ix];
+  // Create linear index
+  int Iin = Ix + offset;
+  int Iout = Ix + offset;
+  /*
+  if (ty > 1) 
+    return;
+    */
+
+  cuPrintf("Index %i bx %i bd %i \n",Iin, bx, gridDim.x);
+  // Load value from global
+  M_out[Iout] = M_in[Iin];
 
   // Avoid compiler optimization if
   // no store request is given
-  if ( 0 == ValIn*StoreMat ) {
+  /*
+  if ( 1 == ValIn*StoreMat ) {
     M_out[Ix] = (double) 5.0;// ValIn;
   };
-
+  */
 };
 
 
