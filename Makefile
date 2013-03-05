@@ -9,7 +9,7 @@ main:
 test: main test1
 
 test1:
-	./RunTest.sh
+	./RunTest.sh 0
 
 clean:
 	rm $(OUTPUT)
