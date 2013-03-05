@@ -35,7 +35,7 @@ int main(int argc, char* argv[])
   dim3 GridSize( 1, 1, 1);
   int offset = 0;
 
-  if (argc > 0) {
+  if (argc > 1) {
     offset = atoi(argv[1]);
   };
   
@@ -56,7 +56,7 @@ int main(int argc, char* argv[])
   checkForCudaErrors("Test 1 - Memory alloc.");
 
   printf("Memory copy Host -> Device \n");
-  //  cudaMemcpy( d_Matin, Mat,  xDim, cudaMemcpyHostToDevice );
+  cudaMemcpy( d_Matin, Mat,  xDim, cudaMemcpyHostToDevice );
   checkForCudaErrors("Test 1 - Memcpy.");
 
   cudaPrintfInit();
@@ -102,12 +102,13 @@ __global__ void cuLoadStoreElement(real *M_in, real *M_out, int StoreMat, int of
   // Create linear index
   int Iin = Ix + offset;
   int Iout = Ix + offset;
-  /*
-  if (ty > 1) 
-    return;
-    */
 
-  cuPrintf("Index %i bx %i bd %i \n",Iin, bx, gridDim.x);
+  /*  
+  if (tx > gridDim.x) 
+    return;
+  */
+
+  //  cuPrintf("Index %i bx %i bd %i \n",Iin, bx, gridDim.x);
   // Load value from global
   M_out[Iout] = M_in[Iin];
 
