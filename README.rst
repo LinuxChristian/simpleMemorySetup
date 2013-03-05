@@ -1,3 +1,4 @@
+=================
 simpleMemorySetup
 =================
 
@@ -6,12 +7,9 @@ A simple test setup to run different memory alignments on CUDA devices. Currentl
 Running
 -----------
 
-First do a
+To run the program do:
     
-  make
-
-and then
-    
-  make test
+ make
+ make test
 
 This will run the RunTest.sh script and use nvprof to get global load/store transactions with no offset.
