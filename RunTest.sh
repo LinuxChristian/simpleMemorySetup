@@ -129,3 +129,13 @@ if [ $TESTNO -eq 0 ] || [ $TESTNO -eq 3 ]; then
     CFLAGS="--Gridx 1 --Min 36 --Max 45"
     profile "./$EXEC $CFLAGS" 1
 fi
+
+
+# Run Test 4
+# Does a simple finite difference using global memory
+# and no tricks
+if [ $TESTNO -eq 0 ] || [ $TESTNO -eq 4 ]; then
+    echo "TESTING A SIMPLE FINITE DIFFERENCE STENCIL USING GLOBAL MEMORY"
+    CFLAGS="--Gridx 1 --Blockx 32 --Blocky 32 -t 2"
+    profile "./$EXEC $CFLAGS" 1
+fi

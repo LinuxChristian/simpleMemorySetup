@@ -28,6 +28,7 @@
 void checkForCudaErrors(const char* checkpoint_description);
 void initializeGPU();
 __global__ void cuLoadStoreElement(real *M_in, real *M_out, int StoreMat, int offset, bool SkipNodes, int SkipMin, int SkipMax);
+__global__ void cuGlobalFD(real *M_in, real *M_out, int StoreMat);
 
 using namespace GetOpt;
 
@@ -84,6 +85,7 @@ int main(int argc, char* argv[])
   ops >> Option('i',"Min", SkipMin, 0);
   ops >> Option('l',"Max", SkipMax, 0);
 
+  // Check input
   if (SkipMax > 0 || SkipMin > 0) {
     if(SkipMin > SkipMax ){
       std::cout << "SkipMin is greater then SkipMax. Please change this!" << std::endl;
@@ -91,6 +93,12 @@ int main(int argc, char* argv[])
     }; 
     SkipNodes=true;
   };
+
+  if (TestNo == 2 && by < 3) {
+    std::cout << "Please make the y-dimension biggere" << std::endl;
+      exit(EXIT_FAILURE);
+  };
+
   dim3 BlockSize( bx, by, 1);
   dim3 GridSize( gx, gy, 1);
 
@@ -125,14 +133,22 @@ int main(int argc, char* argv[])
 
   cudaPrintfInit();
 
-  // Test 1 is Load/Store kernel
+  // Setup 1 is Load/Store kernel
   if (TestNo == 1) {
     cudaProfilerStart();
-    cuLoadStoreElement<<<GridSize, BlockSize>>>(d_Matin, d_Matout, 0, offset, SkipNodes, SkipMin, SkipMax);
+    cuLoadStoreElement<<< GridSize, BlockSize >>>(d_Matin, d_Matout, 0, offset, SkipNodes, SkipMin, SkipMax);
     cudaProfilerStop();
     checkForCudaErrors("Test 1 - Kernel call.");
   };
 
+  // Setup 2 - A simple finite difference kernel using global memory
+  if (TestNo == 2) {
+    cudaProfilerStart();
+    cuGlobalFD<<< GridSize, BlockSize >>>( d_Matin, d_Matout, 0);
+    cudaProfilerStop();
+    checkForCudaErrors("Test 2 - kernel call");
+  };
+  
   cudaDeviceSynchronize();
   cudaPrintfDisplay(stdout, true);
 
@@ -153,7 +169,7 @@ int main(int argc, char* argv[])
  * 
  * M_in  Pointer to input matrix
  * M_out Pointer to output matrix
- * StoreMat Bool if value should be stores
+ * StoreMat If value should be stores
  */
 
 __global__ void cuLoadStoreElement(real *M_in, real *M_out, int StoreMat, int offset, bool SkipNodes, int SkipMin, int SkipMax) {
@@ -175,19 +191,53 @@ __global__ void cuLoadStoreElement(real *M_in, real *M_out, int StoreMat, int of
   int Iin = Ix + offset;
   int Iout = Ix + offset;
 
-  //  cuPrintf("Index %i bx %i bd %i \n",Iin, bx, gridDim.x);
   // Load value from global
   M_out[Iout] = M_in[Iin];
-
-  // Avoid compiler optimization if
-  // no store request is given
-  /*
-  if ( 1 == ValIn*StoreMat ) {
-    M_out[Ix] = (double) 5.0;// ValIn;
-  };
-  */
 };
 
+/**
+ * This kernel reads input from global memory and computes a finite difference between
+ * neighbour points in both directions. The distance is assumed to be 2 (so it is a 
+ * simple mean).
+ *
+ * M_in  Pointer to input matrix
+ * M_out Pointer to output matrix
+ * StoreMat If value should be stores
+ *
+ *     GRID LAYOUT
+ *         O
+ *
+ *   O     x      O
+ *
+ *         O
+ * O is the neighbours and x is the center point where the difference is
+ * computed.
+ */
+__global__ void cuGlobalFD(real *M_in, real *M_out, int StoreMat) {
+  int tx = threadIdx.x;   int ty = threadIdx.y;
+  int bx = blockIdx.x;    int by = blockIdx.y;
+  int GridWidth = gridDim.x*gridDim.y;
+  
+  int Ix = bx * blockDim.x + tx;
+  int Iy = by * blockDim.y + ty;
+
+  if (
+      (Iy < 1 || Iy > gridDim.y*blockDim.y) 
+      || 
+      (Ix < 1 || Ix > gridDim.x*blockDim.x) ) {
+    // Do not compute in boundaires
+    // From test 3 this should not effect coalescing
+    return;
+  };
+
+  
+  real Grady = (M_in[(Iy-1)*gridDim.x+Ix] - M_in[(Iy+1)*gridDim.x+Ix])/2.0;
+  real Gradx = (M_in[(Iy)*gridDim.x+(Ix-1)] - M_in[(Iy)*gridDim.x+(Ix+1)])/2.0;
+
+  if (1 == StoreMat*Gradx) {
+    M_out[Iy*gridDim.x+Ix] = Gradx;
+  };
+};
 
 //-------------------------------------------------------
 // 
