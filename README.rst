@@ -50,6 +50,12 @@ Test 3 - Skipping threads in the copy
 
 Same setup as test 1 but not all threads will copy memory. By default threads 36 -> 45 will skip the copy. The result is the same as in test 1 if similar parmeters where used. This agrees with the theory.
 
+Test 4 - Finite difference using global memory
+""""""""""""""""""""""""""""""""""""""""""""""
+
+The setup is a quite simple finite difference stencil that computes the difference between the value above and below the current node. All the nodes are independent therefore the kernel should be able to scale nicely. 
+The problem with the kernel is that the memory access is now no longer coalecsed. Nodes will access memory at quite different addresses. There will also be a overlap where four threads need to access the same infomation. The test should therefore show a cache hit rate greatere then 0% and a ratio greater then 2 because the GPU now has to transfer much more data.
+
 Requirements
 ____________________
 
