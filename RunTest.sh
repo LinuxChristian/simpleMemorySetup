@@ -126,6 +126,6 @@ fi
 # Memory should still be coacelsed
 if [ $TESTNO -eq 0 ] || [ $TESTNO -eq 3 ]; then
     echo "TESTING WHEN NOT ALL THREADS COPY"
-    CFLAGS="--Min 36 --Max 45"
+    CFLAGS="--Gridx 1 --Min 36 --Max 45"
     profile "./$EXEC $CFLAGS" 1
 fi
