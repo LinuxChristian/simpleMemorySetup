@@ -17,28 +17,92 @@
 ################################################################# */
 
 #include <stdio.h>
-#include <cuda_profiler_api.h> // CUDA 5.0 Profiler API
+#include <getoptpp/getopt_pp.h> // Used to pass command line values
+#include <cuda_profiler_api.h>  // CUDA 5.0 Profiler API
 #include "cuPrintf.cu"
+#include <iostream>
+
 #define real double  // Define the precision
 
 // Prototypes
 void checkForCudaErrors(const char* checkpoint_description);
 void initializeGPU();
-__global__ void cuLoadStoreElement(real *M_in, real *M_out, int StoreMat, int offset);
+__global__ void cuLoadStoreElement(real *M_in, real *M_out, int StoreMat, int offset, bool SkipNodes, int SkipMin, int SkipMax);
 
+using namespace GetOpt;
+
+/**
+ * The function can be called with the following input sequence
+ *
+ * Set all values to default. Run 1D load/store kernel
+ * main
+ *
+ * Run 1D load/store kernel with 5 offset
+ * main 0 5
+ *
+ * Run 1D load/store kernel on a 20,000 node grid
+ * with 
+ * Kernel to run: 0 cuLoadStoreLement
+ * Offset to use: 
+ */
 int main(int argc, char* argv[])
 {
 
-  int xDim = 4096; // Node count in x dimension
+  int xDim = 1; // Node count in x dimension
   int yDim = 1; // Node count in y dimension
-  dim3 BlockSize( 128, 1, 1);
-  dim3 GridSize( 1, 1, 1);
   int offset = 0;
-
-  if (argc > 1) {
-    offset = atoi(argv[1]);
-  };
+  bool SkipNodes = false; // Skip some threads in the copy
+  int SkipMin = 0;
+  int SkipMax = 0;
+  int TestNo = 0;
+  int bx, by = 0;
+  int gx, gy = 0;
   
+  // Pass commandline arguments
+  // t  = test
+  // bx = blocksize in x
+  // by = blocksize in y
+  // gx = gridsize in x
+  // gy = gridsize in y
+  // dx = grid nodes in x
+  // dy = grid nodes in y
+  // s  = skip nodes. Will require two inputs (min, max) thread
+
+  GetOpt_pp ops(argc, argv);
+  
+
+  // Don't use short options when calling 
+  // They are not very descriptive
+  ops >> Option('t',"TestNo", TestNo, 1);
+  ops >> Option('x',"Blockx", bx, 128);
+  ops >> Option('y',"Blocky", by, 1);
+  ops >> Option('g',"Gridx", gx, 1000);
+  ops >> Option('h',"Gridy", gy, 1); 
+  ops >> Option('d',"xdim", xDim, 2000000);
+  ops >> Option('f',"ydim", yDim, 1);
+  ops >> Option('o',"Offset", offset, 0);
+  ops >> Option('i',"Min", SkipMin, 0);
+  ops >> Option('l',"Max", SkipMax, 0);
+
+  if (SkipMax > 0 || SkipMin > 0) {
+    if(SkipMin > SkipMax ){
+      std::cout << "SkipMin is greater then SkipMax. Please change this!" << std::endl;
+      exit(EXIT_FAILURE);
+    }; 
+    SkipNodes=true;
+  };
+  dim3 BlockSize( bx, by, 1);
+  dim3 GridSize( gx, gy, 1);
+
+  std::cout << "--- SETUP ---" << std::endl;
+  std::cout << "Test Number " << TestNo << std::endl;
+  std::cout << "BlockDim.x " << BlockSize.x << " BlockDim.y " << BlockSize.y << std::endl;
+  std::cout << "GridDim.x " << GridSize.x << " GridDim.y " << GridSize.y << std::endl;
+  std::cout << "xDim " << xDim << " yDim " << yDim << std::endl;
+  std::cout << "Offset " << offset << std::endl;
+  if (SkipNodes) {
+    std::cout << "Skip copy in threads " << SkipMin << " " << SkipMax << std::endl;
+  };
   
   initializeGPU();
 
@@ -61,11 +125,13 @@ int main(int argc, char* argv[])
 
   cudaPrintfInit();
 
-  cudaProfilerStart();
-  cuLoadStoreElement<<<GridSize, BlockSize>>>(d_Matin, d_Matout, 0, offset);
-  cudaProfilerStop();
-  checkForCudaErrors("Test 1 - Kernel call.");
-
+  // Test 1 is Load/Store kernel
+  if (TestNo == 1) {
+    cudaProfilerStart();
+    cuLoadStoreElement<<<GridSize, BlockSize>>>(d_Matin, d_Matout, 0, offset, SkipNodes, SkipMin, SkipMax);
+    cudaProfilerStop();
+    checkForCudaErrors("Test 1 - Kernel call.");
+  };
 
   cudaDeviceSynchronize();
   cudaPrintfDisplay(stdout, true);
@@ -90,7 +156,7 @@ int main(int argc, char* argv[])
  * StoreMat Bool if value should be stores
  */
 
-__global__ void cuLoadStoreElement(real *M_in, real *M_out, int StoreMat, int offset) {
+__global__ void cuLoadStoreElement(real *M_in, real *M_out, int StoreMat, int offset, bool SkipNodes, int SkipMin, int SkipMax) {
   
   int tx = threadIdx.x;   int ty = threadIdx.y;
   int bx = blockIdx.x;    int by = blockIdx.y;
@@ -99,14 +165,15 @@ __global__ void cuLoadStoreElement(real *M_in, real *M_out, int StoreMat, int of
   int Ix = bx * blockDim.x + tx;
   int Iy = by * blockDim.y + ty;
 
+  if (SkipNodes && 
+      (Ix > SkipMin && Ix < SkipMax)) {
+    // Skip the copy in some threads
+      return;
+    };
+  
   // Create linear index
   int Iin = Ix + offset;
   int Iout = Ix + offset;
-
-  /*  
-  if (tx > gridDim.x) 
-    return;
-  */
 
   //  cuPrintf("Index %i bx %i bd %i \n",Iin, bx, gridDim.x);
   // Load value from global

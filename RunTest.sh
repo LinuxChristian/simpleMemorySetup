@@ -5,6 +5,8 @@ PROFFLAGS="--profile-from-start-off --devices 0"
 EXEC=main      # Name of executable
 DOPROFTYPE=1   # 1 is event counters
                # 2 is kernel run time
+INPUT=$#       # Number of input
+DOGP=0         # Produce gnuplot figure?
 
 # Check that 
 if [ ! -f $EXEC ]; then
@@ -13,7 +15,18 @@ if [ ! -f $EXEC ]; then
     exit 
 fi
 
-OFFSET=$1
+CFLAGS=" "
+TESTNO=0       # Default: Run all tests
+OFFSET=0
+
+# Load Test number if given
+if [ $INPUT -gt 0 ]; then
+    TESTNO=$1
+fi
+
+if [ $TESTNO -eq 1 ] && [ $INPUT -gt 1 ]; then
+    OFFSET=$2
+fi
 
 function profile {
     local SHELLCOMMAND=$1
@@ -74,10 +87,12 @@ function profile {
         # Get L1 load hit and miss
 	local FLAGS="-s"
 	local COMMANDS="$NVCOMMANDS $FLAGS $SHELLCOMMAND"
+	echo $COMMANDS
 	eval RESULT='$('$COMMANDS')'
 	
 	local RUNTIME=$( echo "$RESULT" | grep cu | awk --field-separator=" " '{print $2 }')
 	echo $RUNTIME
+	echo "$OFFSET $RUNTIME" >> OffsetRuntime.data
     fi
 }
 
@@ -88,28 +103,29 @@ function profile {
 # Requested store
 
 # Run Test 1
-echo "RUNNING TEST 1 - Constant zero offset"
-profile "./$EXEC $OFFSET" $DOPROFTYPE
+if [ $TESTNO -eq 0 ] || [ $TESTNO -eq 1 ]; then
+    echo "RUNNING TEST 1 - Constant offset of $OFFSET"
+    CFLAGS="--Offset $OFFSET"
+    profile "./$EXEC $CFLAGS" 1
+fi
 
-exit
-echo "RUNNING TEST 2 - Changing the offset by 2"
-for OFFSET in `seq 1 2 31`
-do
-    echo $OFFSET
-    profile "./$EXEC $OFFSET" $DOPROFTYPE
-done
-#METRIC="l1_global_load_miss,l1_global_load_hit"
-#COMMANDS="$NVPROF $PROFFLAGS l1_global_load_miss,l1_global_load_hit ./$EXEC"
-#eval L1='$('$COMMANDS')'
+# Run Test 2
+if [ $TESTNO -eq 0 ] || [ $TESTNO -eq 2 ]; then
+    echo "RUNNING TEST 2 - Changing the offset by 2"
+    echo " " > OffsetRuntime.data
+    for OFFSET in `seq 0 2 32`
+    do
+	echo "TESTING OFFSET $OFFSET"
+	CFLAGS="--Gridx 1000 --Offset $OFFSET"
+	profile "./$EXEC $CFLAGS" 2 #$DOPROFTYPE
+    done
+fi
 
-#L1_AVG_HIT=$( echo "$L1" | grep hit | awk --field-separator=" " '{print $2 }')
-#L1_AVG_MISS=$( echo "$L1" | grep miss | awk --field-separator=" " '{print $2 }')
-
-#echo "L1 Hit: " $L1_AVG_HIT " L1 Miss: " $L1_AVG_MISS
-#L1_TOTAL_TRANF=$(echo "$L1_AVG_HIT+$L1_AVG_MISS" | bc)
-#echo "Total memory load tranferes: $L1_TOTAL_TRANF"
-
-
-#$($NVPROF --profile-from-start-off --devices 0 --events l1_global_load_miss,l1_global_load_hit ./$EXEC )
-#$(NVPROF) --profile-from-start-off --devices 0 --events gld_request,gst_request,global_store_transaction ./$(OUTPUT) 
-#	 GLOBAL_STORE_REQUEST=$($(NVPROF) --profile-from-start-off --devices 0 --events global_store_transaction ./$(OUTPUT) | grep global)
+# Run Test 3
+# Only some threads will copy values
+# Memory should still be coacelsed
+if [ $TESTNO -eq 0 ] || [ $TESTNO -eq 3 ]; then
+    echo "TESTING WHEN NOT ALL THREADS COPY"
+    CFLAGS="--Min 36 --Max 45"
+    profile "./$EXEC $CFLAGS" 1
+fi
