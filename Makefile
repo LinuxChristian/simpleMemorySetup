@@ -7,10 +7,16 @@ GETOPTPP = getopt_pp.cpp
 main:
 	$(NVCC) $(INCLUDE) $(NVCCFLAGS) $(GETOPTPP) main.cu -o $(OUTPUT)
 
-test: main test1
+test: main test1 test2 test3
 
-test1:
-	./RunTest.sh 0
+test1: main
+	./RunTest.sh 1 0
 
+test2:
+	./RunTest.sh 2
+	gnuplot GPUMemoryThroughput.gp > GPUMemoryThroughput.png	
+
+test3:
+	./RunTest.sh 3
 clean:
 	rm $(OUTPUT)
