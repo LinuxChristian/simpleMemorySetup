@@ -58,6 +58,11 @@ Test 4 - Finite difference using global memory
 The setup is a quite simple finite difference stencil that computes the difference between the value above and below the current node. All the nodes are independent therefore the kernel should be able to scale nicely. 
 The problem with the kernel is that the memory access is now no longer coalecsed. Nodes will access memory at quite different addresses. There will also be a overlap where four threads need to access the same infomation. The test should therefore show a cache hit rate greatere then 0% and a ratio greater then 2 because the GPU now has to transfer much more data.
 
+Test 5 - Finite difference using shared memory
+""""""""""""""""""""""""""""""""""""""""""""""
+
+The same stencil as in test 4 but now the vaules are extracted from shared memory. This means that the uncoalesced memory access is now to shared memory and the overhead should be reduced a lot.
+
 Requirements
 ____________________
 

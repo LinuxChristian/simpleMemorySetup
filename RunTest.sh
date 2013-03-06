@@ -136,6 +136,14 @@ fi
 # and no tricks
 if [ $TESTNO -eq 0 ] || [ $TESTNO -eq 4 ]; then
     echo "TESTING A SIMPLE FINITE DIFFERENCE STENCIL USING GLOBAL MEMORY"
-    CFLAGS="--Gridx 100 --Gridy 100 --Blockx 32 --Blocky 32 -t 2 --xdim 10000 --ydim 10000"
+    CFLAGS="--Gridx 2000 --Gridy 2000 --Blockx 32 --Blocky 32 -t 2 --xdim 10000 --ydim 10000"
+    profile "./$EXEC $CFLAGS" 1
+fi
+
+# Run Test 5
+# Does a simple finite difference using shared memory
+if [ $TESTNO -eq 0 ] || [ $TESTNO -eq 5 ]; then
+    echo "TESTING A SIMPLE FINITE DIFFERENCE STENCIL USING SHARED MEMORY"
+    CFLAGS="--Gridx 2000 --Gridy 2000 --Blockx 32 --Blocky 32 -t 3 --xdim 10000 --ydim 10000"
     profile "./$EXEC $CFLAGS" 1
 fi

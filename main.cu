@@ -29,6 +29,9 @@ void checkForCudaErrors(const char* checkpoint_description);
 void initializeGPU();
 __global__ void cuLoadStoreElement(real *M_in, real *M_out, int StoreMat, int offset, bool SkipNodes, int SkipMin, int SkipMax);
 __global__ void cuGlobalFD(real *M_in, real *M_out, int StoreMat);
+__global__ void cuSharedFD(real *M_in, real *M_out, int StoreMat);
+
+#define SHAREDBLOCKSIZE 32
 
 using namespace GetOpt;
 
@@ -94,7 +97,13 @@ int main(int argc, char* argv[])
     SkipNodes=true;
   };
 
-  if (TestNo == 2 && by < 3) {
+  if (TestNo == 3) {
+    bx = SHAREDBLOCKSIZE;
+    by = SHAREDBLOCKSIZE;
+    std::cout << "Forced size of blockSize" << std::endl;
+  };
+
+  if ( (TestNo == 2) && by < 3) {
     std::cout << "Please make the y-dimension biggere" << std::endl;
       exit(EXIT_FAILURE);
   };
@@ -121,7 +130,7 @@ int main(int argc, char* argv[])
 
   real *Mat;      // Host pointer
   real *d_Matin;  // Device pointer to input array
-  real *d_Matout; // Device pointer to input array
+  real *d_Matout; // Device pointer to output array
   Mat = (real*) calloc(xDim*yDim, sizeof(real));  // Host memory
   cudaMalloc( (void**) &d_Matin , xDim*yDim*sizeof(real) );    // Device memory
   cudaMalloc( (void**) &d_Matout, xDim*yDim*sizeof(real) );    // Device memory
@@ -146,9 +155,19 @@ int main(int argc, char* argv[])
   if (TestNo == 2) {
     std::cout << "Calling global finite difference kernel" << std::endl;
     cudaProfilerStart();
-    cuGlobalFD<<< GridSize, BlockSize >>>( d_Matin, d_Matout, 0);
+    cuGlobalFD<<< GridSize, BlockSize >>>( d_Matin, d_Matout, 0 );
     cudaProfilerStop();
     checkForCudaErrors("Test 2 - kernel call");
+  };
+
+
+  // Setup 3 - A simple finite difference kernel using shared memory
+  if (TestNo == 3) {
+    std::cout << "Calling shared finite difference kernel" << std::endl;
+    cudaProfilerStart();
+    cuSharedFD<<< GridSize, BlockSize >>>( d_Matin, d_Matout, 0 );
+    cudaProfilerStop();
+    checkForCudaErrors("Test 3 - kernel call");
   };
   
   cudaDeviceSynchronize();
@@ -239,6 +258,60 @@ __global__ void cuGlobalFD(real *M_in, real *M_out, int StoreMat) {
   if (1 == StoreMat*Gradx) {
     M_out[Iy*gridDim.x+Ix] = Gradx;
   };
+};
+
+/**
+ * This kernel reads input from global memory to shared memory and then computes a
+ * finite difference between neighbour points in both directions. 
+ * The distance is assumed to be 2 (so it is a simple mean).
+ *
+ * M_in  Pointer to input matrix
+ * M_out Pointer to output matrix
+ * StoreMat If value should be stores
+ *
+ *     GRID LAYOUT
+ *         O
+ *
+ *   O     x      O
+ *
+ *         O
+ * O is the neighbours and x is the center point where the difference is
+ * computed.
+ *
+ * This function is very similar to cuGlobalFD.
+ */
+__global__ void cuSharedFD(real *M_in, real *M_out, int StoreMat) {
+  int tx = threadIdx.x;   int ty = threadIdx.y;
+  int bx = blockIdx.x;    int by = blockIdx.y;
+  
+  int Ix = bx * blockDim.x + tx;
+  int Iy = by * blockDim.y + ty;
+
+  // Shared matrix with dimensions hard coded
+  __shared__ real sMat[SHAREDBLOCKSIZE*SHAREDBLOCKSIZE];
+
+  // Load data from global memory
+  sMat[ty*SHAREDBLOCKSIZE+tx] = M_in[Iy*gridDim.x+Ix];
+
+  __syncthreads();
+
+  if (
+      (Iy < 1 || Iy > gridDim.y*blockDim.y) 
+      || 
+      (Ix < 1 || Ix > gridDim.x*blockDim.x) ) {
+    // Do not compute in boundaires
+    // From test 3 this should not effect coalescing
+    return;
+  };
+
+  /*  
+  real Grady = (M_in[(Iy-1)*gridDim.x+Ix] - M_in[(Iy+1)*gridDim.x+Ix])/2.0;
+  real Gradx = (M_in[(Iy)*gridDim.x+(Ix-1)] - M_in[(Iy)*gridDim.x+(Ix+1)])/2.0;
+
+  if (1 == StoreMat*Gradx) {
+    M_out[Iy*gridDim.x+Ix] = Gradx;
+    };
+  */
 };
 
 //-------------------------------------------------------
