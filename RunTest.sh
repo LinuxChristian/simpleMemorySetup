@@ -136,6 +136,6 @@ fi
 # and no tricks
 if [ $TESTNO -eq 0 ] || [ $TESTNO -eq 4 ]; then
     echo "TESTING A SIMPLE FINITE DIFFERENCE STENCIL USING GLOBAL MEMORY"
-    CFLAGS="--Gridx 1 --Blockx 32 --Blocky 32 -t 2"
+    CFLAGS="--Gridx 10 --Gridy 10 --Blockx 32 --Blocky 32 -t 2 --xdim 1000 --ydim 1000"
     profile "./$EXEC $CFLAGS" 1
 fi

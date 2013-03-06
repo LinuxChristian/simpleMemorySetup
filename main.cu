@@ -122,19 +122,20 @@ int main(int argc, char* argv[])
   real *Mat;      // Host pointer
   real *d_Matin;  // Device pointer to input array
   real *d_Matout; // Device pointer to input array
-  Mat = (real*) calloc(xDim, sizeof(real));  // Host memory
+  Mat = (real*) calloc(xDim*yDim, sizeof(real));  // Host memory
   cudaMalloc( (void**) &d_Matin , xDim*yDim*sizeof(real) );    // Device memory
   cudaMalloc( (void**) &d_Matout, xDim*yDim*sizeof(real) );    // Device memory
   checkForCudaErrors("Test 1 - Memory alloc.");
 
   printf("Memory copy Host -> Device \n");
-  cudaMemcpy( d_Matin, Mat,  xDim, cudaMemcpyHostToDevice );
+  cudaMemcpy( d_Matin, Mat,  xDim*yDim*sizeof(real), cudaMemcpyHostToDevice );
   checkForCudaErrors("Test 1 - Memcpy.");
 
   cudaPrintfInit();
 
   // Setup 1 is Load/Store kernel
   if (TestNo == 1) {
+    std::cout << "Calling load/store kernel" << std::endl;
     cudaProfilerStart();
     cuLoadStoreElement<<< GridSize, BlockSize >>>(d_Matin, d_Matout, 0, offset, SkipNodes, SkipMin, SkipMax);
     cudaProfilerStop();
@@ -143,6 +144,7 @@ int main(int argc, char* argv[])
 
   // Setup 2 - A simple finite difference kernel using global memory
   if (TestNo == 2) {
+    std::cout << "Calling global finite difference kernel" << std::endl;
     cudaProfilerStart();
     cuGlobalFD<<< GridSize, BlockSize >>>( d_Matin, d_Matout, 0);
     cudaProfilerStop();
