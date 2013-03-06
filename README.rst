@@ -4,6 +4,8 @@ simpleMemorySetup
 
 A simple test setup to run different memory alignments on CUDA devices. Currently it is a implementation of the CUDA offsetCopy kernel from the programming guide. For more infomation on CUDA memory read [3].
 
+** REQUIRES CUDA 5.0 OR GREATER **
+
 Running
 -----------
 
@@ -22,11 +24,11 @@ Test 1:  - Constant offset
 
 This tests run the copy with a constant offset that is user defined. The test can be run with the command
 
-    make test1
+|    make test1
 
 or 
 
-    ./RunTest.sh 1 5
+|    ./RunTest.sh 1 5
 
 where the first value (1) is the test and the second value (5) is the offset to use. This will profile the run and return the following events from nvprof,
 
