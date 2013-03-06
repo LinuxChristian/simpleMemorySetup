@@ -9,8 +9,8 @@ Running
 
 To run the program do:
     
- make
- make test
+*  make
+*  make test
 
 This will run the RunTest.sh script and use nvprof to get global load/store transactions with no offset.
 
