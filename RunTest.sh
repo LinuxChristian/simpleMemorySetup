@@ -80,6 +80,11 @@ function profile {
 	fi
 	echo "Ratio: $STORE_RATIO"
 	echo " "
+
+	if [ $# -eq 3 ]; then
+	    #printf "%i \t %i \t %i \t %i \t %i\n" $L1_AVG_HIT $L1_AVG_MISS $GLD_AVG $GST_AVG $STORE_TRANF_AVG >> $3
+	    printf "%f \t %f \n" $LOAD_RATIO $STORE_RATIO >> $3
+	fi
     fi
 
     # Profile time
@@ -87,12 +92,14 @@ function profile {
         # Get L1 load hit and miss
 	local FLAGS="-s"
 	local COMMANDS="$NVCOMMANDS $FLAGS $SHELLCOMMAND"
-	echo $COMMANDS
 	eval RESULT='$('$COMMANDS')'
 	
 	local RUNTIME=$( echo "$RESULT" | grep cu | awk --field-separator=" " '{print $2 }')
 	echo $RUNTIME
-	echo "$OFFSET $RUNTIME" >> OffsetRuntime.data
+
+	if [ $# -eq 3 ]; then 
+	    echo "$OFFSET $RUNTIME" >> $3
+	fi
     fi
 }
 
@@ -112,12 +119,13 @@ fi
 # Run Test 2
 if [ $TESTNO -eq 0 ] || [ $TESTNO -eq 2 ]; then
     echo "RUNNING TEST 2 - Changing the offset by 2"
-    echo " " > OffsetRuntime.data
+    OUTPUTFILE="OffsetRuntime.data"
+    echo " " > $OUTPUTFILE
     for OFFSET in `seq 0 2 32`
     do
 	echo "TESTING OFFSET $OFFSET"
 	CFLAGS="--Gridx 1000 --Offset $OFFSET"
-	profile "./$EXEC $CFLAGS" 2 #$DOPROFTYPE
+	profile "./$EXEC $CFLAGS" 2 $OUTPUTFILE
     done
 fi
 
@@ -146,4 +154,22 @@ if [ $TESTNO -eq 0 ] || [ $TESTNO -eq 5 ]; then
     echo "TESTING A SIMPLE FINITE DIFFERENCE STENCIL USING SHARED MEMORY"
     CFLAGS="--Gridx 2000 --Gridy 2000 --Blockx 32 --Blocky 32 -t 3 --xdim 10000 --ydim 10000"
     profile "./$EXEC $CFLAGS" 1
+fi
+
+# Run Test 6
+# Runs test 1 for a lot of different grid sizes. What the test should show it that the GPU is only
+# able to achive a ratio of 2 when the problem size get large.
+if [ $TESTNO -eq 0 ] || [ $TESTNO -eq 6 ]; then
+    echo "RUNNING TEST 6 - TEST 1 WITH CHANGING DIMENSIONS"
+    OUTPUTFILE="MemCpyEffency.data"
+    #printf "GDIM \t L1_HIT \t L1_MISS \t GLD_REQ \t GST_REQ \t GLOBAL_ST \n" > $OUTPUTFILE
+    printf "THREADS \t LD_RATIO \t ST_RATIO \n" > $OUTPUTFILE
+    for GSIZE in `seq 1 10 200`
+    do
+	echo "TESTING 1D GRID DIMENSIONS $GSIZE"
+	CFLAGS="--Gridx $GSIZE"
+	THREADS=$(echo "scale=2; $GSIZE*128" | bc) # Note: 128 is the default threads pr. block
+	printf "%i \t " $THREADS >> $OUTPUTFILE
+	profile "./$EXEC $CFLAGS" 1 $OUTPUTFILE
+    done
 fi

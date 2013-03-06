@@ -25,5 +25,8 @@ test4:
 test5:
 	./RunTest.sh 5
 
+test6:
+	./RunTest.sh 6
+
 clean:
 	rm $(OUTPUT)
