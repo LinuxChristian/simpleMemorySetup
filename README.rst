@@ -9,8 +9,8 @@ Running
 
 To run the program do:
     
-    make
-    make test
+|    make
+|    make test
 
 This will run the RunTest.sh script and use nvprof to get global load/store transactions with no offset.
 
@@ -58,6 +58,6 @@ To use the software you need to install getoptpp [2] and have the file getopt_pp
 References
 _____________________
 
-[1] < http://docs.nvidia.com/cuda/profiler-users-guide/index.html >
-[2] < http://code.google.com/p/getoptpp >
-[3] < http://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#coalesced-access-global-memory >
+* [1] < http://docs.nvidia.com/cuda/profiler-users-guide/index.html >
+* [2] < http://code.google.com/p/getoptpp >
+* [3] < http://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#coalesced-access-global-memory >
