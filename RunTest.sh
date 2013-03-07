@@ -97,8 +97,10 @@ function profile {
 	local RUNTIME=$( echo "$RESULT" | grep cu | awk --field-separator=" " '{print $2 }')
 	echo $RUNTIME
 
-	if [ $# -eq 3 ]; then 
+	if [ $# -eq 3 ] && [ $TESTNO -ne 7 ]; then 
 	    echo "$OFFSET $RUNTIME" >> $3
+	else
+	    echo "$RUNTIME" >> $3
 	fi
     fi
 }
@@ -171,5 +173,28 @@ if [ $TESTNO -eq 0 ] || [ $TESTNO -eq 6 ]; then
 	THREADS=$(echo "scale=2; $GSIZE*128" | bc) # Note: 128 is the default threads pr. block
 	printf "%i \t " $THREADS >> $OUTPUTFILE
 	profile "./$EXEC $CFLAGS" 1 $OUTPUTFILE
+    done
+fi
+
+# Run Test 7
+# Runs test 5 for different grid sizes with and without padding
+# This should show the effect of the ucoalesced memory access by the halo nodes
+if [ $TESTNO -eq 0 ] || [ $TESTNO -eq 7 ]; then
+    echo "RUNNING TEST 7 - TEST 5 WITH CHANGING DIMENSIONS AND PADDING"
+    
+    PADDINGLINENO=$(awk '/#define PADDING/{print FNR}' main.cu) # Get the line number of the padding definition
+    echo $PADDINGLINENO
+    echo "perl -pi -e 'print \"#define PADDING 0\n\" if $. == $PADDINGLINENO' main.cu"
+    #$(perl -pi -e 'print "#define PADDING 0\n" if $. == $PADDINGLINENO' main.cu)
+    exit
+    OUTPUTFILE="OnePaddingEffency.data"
+    printf "MEMSIZE \t TIME \n" > $OUTPUTFILE
+    for GSIZE in `seq 64 32 1024`
+    do
+	echo "TESTING 1D GRID DIMENSIONS $GSIZE x $GSIZE"
+	CFLAGS="--Gridx $GSIZE --Gridy $GSIZE"
+	THREADS=$(echo "scale=2; $GSIZE*$GSIZE*32*32*8" | bc) # Note: 32x32 is the default threads pr. block * 8 bytes pr thread
+	printf "%i \t " $THREADS >> $OUTPUTFILE
+	profile "./$EXEC $CFLAGS" 2 $OUTPUTFILE
     done
 fi

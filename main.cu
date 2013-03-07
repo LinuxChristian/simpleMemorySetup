@@ -31,7 +31,9 @@ __global__ void cuLoadStoreElement(real *M_in, real *M_out, int StoreMat, int of
 __global__ void cuGlobalFD(real *M_in, real *M_out, int StoreMat);
 __global__ void cuSharedFD(real *M_in, real *M_out, int StoreMat);
 
-#define SHAREDBLOCKSIZE 32
+#define TILE_WIDTH 32
+#define TILE_HEIGHT 32
+#define PADDING 0
 
 using namespace GetOpt;
 
@@ -98,8 +100,8 @@ int main(int argc, char* argv[])
   };
 
   if (TestNo == 3) {
-    bx = SHAREDBLOCKSIZE;
-    by = SHAREDBLOCKSIZE;
+    bx = TILE_WIDTH;
+    by = TILE_HEIGHT;
     std::cout << "Forced size of blockSize" << std::endl;
   };
 
@@ -284,14 +286,14 @@ __global__ void cuSharedFD(real *M_in, real *M_out, int StoreMat) {
   int tx = threadIdx.x;   int ty = threadIdx.y;
   int bx = blockIdx.x;    int by = blockIdx.y;
   
-  int Ix = bx * blockDim.x + tx;
-  int Iy = by * blockDim.y + ty;
+  int Ix = bx * (TILE_HEIGHT - 2*PADDING) + tx;
+  int Iy = by * (TILE_WIDTH  - 2*PADDING) + ty;
 
   // Shared matrix with dimensions hard coded
-  __shared__ real sMat[SHAREDBLOCKSIZE*SHAREDBLOCKSIZE];
+  __shared__ real sMat[TILE_WIDTH][TILE_HEIGHT];
 
   // Load data from global memory
-  sMat[ty*SHAREDBLOCKSIZE+tx] = M_in[Iy*gridDim.x+Ix];
+  sMat[tx][ty] = M_in[Iy*gridDim.x+Ix];
 
   __syncthreads();
 
