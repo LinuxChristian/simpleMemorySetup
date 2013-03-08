@@ -300,14 +300,16 @@ __global__ void cuSharedFD(real *M_in, real *M_out, int StoreMat) {
   // Shared matrix with dimensions hard coded
   __shared__ real sMat[TILE_WIDTH*TILE_HEIGHT];
 
+  /*
   if (
       (Ix >= gridDim.x*(TILE_WIDTH-2*PADDING)) ||
       (Iy >= gridDim.y*(TILE_HEIGHT-2*PADDING))
       ) {
     return;
   };
+  */
   // Load data from global memory
-  sMat[ty*TILE_WIDTH+tx] = M_in[Iy*gridDim.x+Ix];
+  sMat[ty*TILE_WIDTH+tx] = M_in[Iy*TILE_WIDTH*gridDim.x+Ix];
 
   __syncthreads();
   
