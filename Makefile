@@ -31,5 +31,8 @@ test6:
 test7:
 	./RunTest.sh 7
 
+plot7: 
+	gnuplot PaddingEfficiency.gp > PaddingEfficiency.png
+
 clean:
 	rm $(OUTPUT)

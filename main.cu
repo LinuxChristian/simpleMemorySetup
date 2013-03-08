@@ -33,7 +33,7 @@ __global__ void cuSharedFD(real *M_in, real *M_out, int StoreMat);
 
 #define TILE_WIDTH 32
 #define TILE_HEIGHT 32
-#define PADDING 0
+#define PADDING 0 
 
 using namespace GetOpt;
 
@@ -108,6 +108,14 @@ int main(int argc, char* argv[])
   if ( (TestNo == 2) && by < 3) {
     std::cout << "Please make the y-dimension biggere" << std::endl;
       exit(EXIT_FAILURE);
+  };
+
+  if ( (bx*gx > xDim) || (by*gy > yDim) ) {
+    std::cout << "Requested: " << bx*gx << " threads in x" << std::endl;
+    std::cout << "Requested: " << by*gy << " threads in y" << std::endl;
+    std::cout << "xDim " << xDim << " yDim " << yDim << std::endl;
+    std::cout << "Please increase size of grid to stop threads from reading outside memory bound. " << std::endl;
+    exit(EXIT_FAILURE);
   };
 
   dim3 BlockSize( bx, by, 1);
@@ -290,29 +298,37 @@ __global__ void cuSharedFD(real *M_in, real *M_out, int StoreMat) {
   int Iy = by * (TILE_WIDTH  - 2*PADDING) + ty;
 
   // Shared matrix with dimensions hard coded
-  __shared__ real sMat[TILE_WIDTH][TILE_HEIGHT];
+  __shared__ real sMat[TILE_WIDTH*TILE_HEIGHT];
 
+  if (
+      (Ix >= gridDim.x*(TILE_WIDTH-2*PADDING)) ||
+      (Iy >= gridDim.y*(TILE_HEIGHT-2*PADDING))
+      ) {
+    return;
+  };
   // Load data from global memory
-  sMat[tx][ty] = M_in[Iy*gridDim.x+Ix];
+  sMat[ty*TILE_WIDTH+tx] = M_in[Iy*gridDim.x+Ix];
 
   __syncthreads();
-
+  
   if (
       (Iy < 1 || Iy > gridDim.y*blockDim.y) 
       || 
-      (Ix < 1 || Ix > gridDim.x*blockDim.x) ) {
+      (Ix < 1 || Ix > gridDim.x*blockDim.x) 
+      ) {
     // Do not compute in boundaires
     // From test 3 this should not effect coalescing
     return;
   };
 
-  /*  
-  real Grady = (M_in[(Iy-1)*gridDim.x+Ix] - M_in[(Iy+1)*gridDim.x+Ix])/2.0;
-  real Gradx = (M_in[(Iy)*gridDim.x+(Ix-1)] - M_in[(Iy)*gridDim.x+(Ix+1)])/2.0;
+
+  /*
+  real Grady = (sMat[tx][ty] - sMat[tx][ty+1])/2.0;
+  real Gradx = (sMat[tx][ty] - sMat[tx+1][ty])/2.0;
 
   if (1 == StoreMat*Gradx) {
     M_out[Iy*gridDim.x+Ix] = Gradx;
-    };
+  };
   */
 };
 

@@ -11,8 +11,8 @@ DOGP=0         # Produce gnuplot figure?
 # Check that 
 if [ ! -f $EXEC ]; then
     echo "FILE $EXEC DOES NOT EXIST"
-    echo "PLEASE RUN MAKE"
-    exit 
+    echo "NOW RUNNING MAKE"
+    eval "make > /dev/null 2>&1"
 fi
 
 CFLAGS=" "
@@ -146,7 +146,7 @@ fi
 # and no tricks
 if [ $TESTNO -eq 0 ] || [ $TESTNO -eq 4 ]; then
     echo "TESTING A SIMPLE FINITE DIFFERENCE STENCIL USING GLOBAL MEMORY"
-    CFLAGS="--Gridx 2000 --Gridy 2000 --Blockx 32 --Blocky 32 -t 2 --xdim 10000 --ydim 10000"
+    CFLAGS="--Gridx 128 --Gridy 128 --Blockx 32 --Blocky 32 -t 2 --xdim 10000 --ydim 10000"
     profile "./$EXEC $CFLAGS" 1
 fi
 
@@ -154,7 +154,20 @@ fi
 # Does a simple finite difference using shared memory
 if [ $TESTNO -eq 0 ] || [ $TESTNO -eq 5 ]; then
     echo "TESTING A SIMPLE FINITE DIFFERENCE STENCIL USING SHARED MEMORY"
-    CFLAGS="--Gridx 2000 --Gridy 2000 --Blockx 32 --Blocky 32 -t 3 --xdim 10000 --ydim 10000"
+
+    # Force padding to be zero and recompile
+    PADDINGLINENO=$(awk '/#define PADDING/{print FNR}' main.cu) # Get the line number of the padding definition
+    LINECONTENT=$(awk '/#define PADDING/{print $0}' main.cu) # Get the line number of the padding definition
+    eval "perl -pi -e 's/$LINECONTENT/#define PADDING 0 / if $. == $PADDINGLINENO' main.cu"
+    eval "make clean > /dev/null 2>&1 ; make > /dev/null 2>&1"
+    
+    if [ ! -f $EXEC ]; then
+	echo "FAILED TO COMPILE $EXEC"
+	exit
+    fi
+
+    
+    CFLAGS="--Gridx 128 --Gridy 128 --Blockx 32 --Blocky 32 -t 3 --xdim 10000 --ydim 10000"
     profile "./$EXEC $CFLAGS" 1
 fi
 
@@ -181,20 +194,40 @@ fi
 # This should show the effect of the ucoalesced memory access by the halo nodes
 if [ $TESTNO -eq 0 ] || [ $TESTNO -eq 7 ]; then
     echo "RUNNING TEST 7 - TEST 5 WITH CHANGING DIMENSIONS AND PADDING"
-    
-    PADDINGLINENO=$(awk '/#define PADDING/{print FNR}' main.cu) # Get the line number of the padding definition
-    echo $PADDINGLINENO
-    echo "perl -pi -e 'print \"#define PADDING 0\n\" if $. == $PADDINGLINENO' main.cu"
-    #$(perl -pi -e 'print "#define PADDING 0\n" if $. == $PADDINGLINENO' main.cu)
-    exit
-    OUTPUTFILE="OnePaddingEffency.data"
-    printf "MEMSIZE \t TIME \n" > $OUTPUTFILE
-    for GSIZE in `seq 64 32 1024`
+
+    # Init flags
+    PROFFLAGS="$PROFFLAGS -u ms" # Set time unit to microseconds
+    GSIZE=128
+    CFLAGS="--Gridx $GSIZE --Gridy $GSIZE --xdim 10000 --ydim 10000 -t 3"
+
+    for PADDINGSIZE in `seq 0 1 1`
     do
-	echo "TESTING 1D GRID DIMENSIONS $GSIZE x $GSIZE"
-	CFLAGS="--Gridx $GSIZE --Gridy $GSIZE"
-	THREADS=$(echo "scale=2; $GSIZE*$GSIZE*32*32*8" | bc) # Note: 32x32 is the default threads pr. block * 8 bytes pr thread
-	printf "%i \t " $THREADS >> $OUTPUTFILE
-	profile "./$EXEC $CFLAGS" 2 $OUTPUTFILE
+        # Replace padding size and recompile
+	PADDINGLINENO=$(awk '/#define PADDING/{print FNR}' main.cu) # Get the line number of the padding definition
+	LINECONTENT=$(awk '/#define PADDING/{print $0}' main.cu) # Get the line number of the padding definition
+	eval "perl -pi -e 's/$LINECONTENT/#define PADDING $PADDINGSIZE / if $. == $PADDINGLINENO' main.cu"
+	eval "make clean > /dev/null 2>&1 ; make > /dev/null 2>&1"
+
+	if [ ! -f $EXEC ]; then
+	    echo "FAILED TO COMPILE $EXEC"
+	    exit
+	fi
+
+	OUTPUTFILE="PaddingEffency.data"
+	OUTPUTFILE="$PADDINGSIZE$OUTPUTFILE"
+	printf "MEMSIZE \t TIME \n" > $OUTPUTFILE
+	for GSIZE in `seq 2 8 128` 
+	do
+	    echo "TESTING 1D GRID DIMENSIONS $GSIZE x $GSIZE"
+	    GDIM=$(echo "$GSIZE*32+100" | bc) # Note: Make grid a bit bigger
+	    CFLAGS="--Gridx $GSIZE --Gridy $GSIZE --xdim $GDIM --ydim $GDIM -t 3"
+	    echo $CFLAGS
+	    THREADS=$(echo "scale=2; $GSIZE*$GSIZE*32*32*8" | bc) # Note: 32x32 is the default threads pr. block * 8 bytes pr thread
+	    printf "%i \t " $THREADS >> $OUTPUTFILE
+	    profile "./$EXEC $CFLAGS" 2 $OUTPUTFILE
+	done
+	echo $CFLAGS
+	# Just to show ratio
+	profile "./$EXEC $CFLAGS" 1
     done
 fi
