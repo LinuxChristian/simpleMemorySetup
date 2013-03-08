@@ -67,6 +67,7 @@ Requirements
 ____________________
 
 To use the software you need to install getoptpp [2] and have the file getopt_pp.cpp in the root src directory. You will also need gnuplot if you want to produce .png files.
+If the system does not have a awk version installed I suggest installing gawk.
 
 References
 _____________________
