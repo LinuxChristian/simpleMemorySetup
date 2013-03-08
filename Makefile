@@ -31,8 +31,14 @@ test6:
 test7:
 	./RunTest.sh 7
 
-plot7: 
+test8: test7
+	./RunTest.sh 8
+
+plot7: test7 
 	gnuplot PaddingEfficiency.gp > PaddingEfficiency.png
+
+plot8: test8
+	gnuplot GlobalVsSharedStencil.gp > GlobalVsSharedEfficiency.png
 
 clean:
 	rm $(OUTPUT)

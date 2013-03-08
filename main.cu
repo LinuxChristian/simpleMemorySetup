@@ -33,7 +33,7 @@ __global__ void cuSharedFD(real *M_in, real *M_out, int StoreMat);
 
 #define TILE_WIDTH 32
 #define TILE_HEIGHT 32
-#define PADDING 0 
+#define PADDING 1 
 
 using namespace GetOpt;
 
@@ -63,7 +63,8 @@ int main(int argc, char* argv[])
   int TestNo = 0;
   int bx, by = 0;
   int gx, gy = 0;
-  
+  int TotalRuns = 100;
+
   // Pass commandline arguments
   // t  = test
   // bx = blocksize in x
@@ -152,34 +153,37 @@ int main(int argc, char* argv[])
 
   cudaPrintfInit();
 
-  // Setup 1 is Load/Store kernel
-  if (TestNo == 1) {
-    std::cout << "Calling load/store kernel" << std::endl;
-    cudaProfilerStart();
-    cuLoadStoreElement<<< GridSize, BlockSize >>>(d_Matin, d_Matout, 0, offset, SkipNodes, SkipMin, SkipMax);
-    cudaProfilerStop();
-    checkForCudaErrors("Test 1 - Kernel call.");
+
+  for (int i = 0; i < TotalRuns; i++) {
+    // Setup 1 is Load/Store kernel
+    if (TestNo == 1) {
+      std::cout << "Calling load/store kernel" << std::endl;
+      cudaProfilerStart();
+      cuLoadStoreElement<<< GridSize, BlockSize >>>(d_Matin, d_Matout, 0, offset, SkipNodes, SkipMin, SkipMax);
+      cudaProfilerStop();
+      checkForCudaErrors("Test 1 - Kernel call.");
+    };
+    
+    // Setup 2 - A simple finite difference kernel using global memory
+    if (TestNo == 2) {
+      std::cout << "Calling global finite difference kernel" << std::endl;
+      cudaProfilerStart();
+      cuGlobalFD<<< GridSize, BlockSize >>>( d_Matin, d_Matout, 0 );
+      cudaProfilerStop();
+      checkForCudaErrors("Test 2 - kernel call");
+    };
+    
+    
+    // Setup 3 - A simple finite difference kernel using shared memory
+    if (TestNo == 3) {
+      std::cout << "Calling shared finite difference kernel" << std::endl;
+      cudaProfilerStart();
+      cuSharedFD<<< GridSize, BlockSize >>>( d_Matin, d_Matout, 0 );
+      cudaProfilerStop();
+      checkForCudaErrors("Test 3 - kernel call");
+    };    
   };
 
-  // Setup 2 - A simple finite difference kernel using global memory
-  if (TestNo == 2) {
-    std::cout << "Calling global finite difference kernel" << std::endl;
-    cudaProfilerStart();
-    cuGlobalFD<<< GridSize, BlockSize >>>( d_Matin, d_Matout, 0 );
-    cudaProfilerStop();
-    checkForCudaErrors("Test 2 - kernel call");
-  };
-
-
-  // Setup 3 - A simple finite difference kernel using shared memory
-  if (TestNo == 3) {
-    std::cout << "Calling shared finite difference kernel" << std::endl;
-    cudaProfilerStart();
-    cuSharedFD<<< GridSize, BlockSize >>>( d_Matin, d_Matout, 0 );
-    cudaProfilerStop();
-    checkForCudaErrors("Test 3 - kernel call");
-  };
-  
   cudaDeviceSynchronize();
   cudaPrintfDisplay(stdout, true);
 
@@ -297,19 +301,14 @@ __global__ void cuSharedFD(real *M_in, real *M_out, int StoreMat) {
   int Ix = bx * (TILE_HEIGHT - 2*PADDING) + tx;
   int Iy = by * (TILE_WIDTH  - 2*PADDING) + ty;
 
+  int I = Iy*TILE_WIDTH*gridDim.x+Ix;
+  int Is = ty*TILE_WIDTH+tx;
+
   // Shared matrix with dimensions hard coded
   __shared__ real sMat[TILE_WIDTH*TILE_HEIGHT];
 
-  /*
-  if (
-      (Ix >= gridDim.x*(TILE_WIDTH-2*PADDING)) ||
-      (Iy >= gridDim.y*(TILE_HEIGHT-2*PADDING))
-      ) {
-    return;
-  };
-  */
   // Load data from global memory
-  sMat[ty*TILE_WIDTH+tx] = M_in[Iy*TILE_WIDTH*gridDim.x+Ix];
+  sMat[Is] = M_in[I];
 
   __syncthreads();
   
@@ -323,15 +322,29 @@ __global__ void cuSharedFD(real *M_in, real *M_out, int StoreMat) {
     return;
   };
 
+  real Grady = 0;
+  real Gradx = 0;
 
-  /*
-  real Grady = (sMat[tx][ty] - sMat[tx][ty+1])/2.0;
-  real Gradx = (sMat[tx][ty] - sMat[tx+1][ty])/2.0;
+  if (PADDING == 1) {
+    Grady = (sMat[(ty-1)*TILE_WIDTH+tx] - sMat[(ty)*TILE_WIDTH+tx])/2.0;
+    Gradx = (sMat[(ty)*TILE_WIDTH+(tx+1)] - sMat[(ty)*TILE_WIDTH+tx])/2.0;
+  } else if (PADDING == 0) {
+    
+    if ( (tx > 0 && tx < TILE_WIDTH-1) && (ty > 0 && ty < TILE_HEIGHT-1) ) {
+      Grady = (sMat[(ty-1)*TILE_WIDTH+tx] - sMat[(ty)*TILE_WIDTH+tx])/2.0;
+      Gradx = (sMat[(ty)*TILE_WIDTH+(tx+1)] - sMat[(ty)*TILE_WIDTH+tx])/2.0;
+    } else {
+      // Load from global at boundaries
+      Grady = (M_in[(Iy-1)*TILE_WIDTH*gridDim.x+Ix] - M_in[(Iy)*TILE_WIDTH*gridDim.x+Ix])/2.0;
+      Gradx = (M_in[(Iy)*TILE_WIDTH*gridDim.x+(Ix-1)] - M_in[(Iy)*TILE_WIDTH*gridDim.x+Ix])/2.0;
+    };
+  };
 
+    /*
   if (1 == StoreMat*Gradx) {
     M_out[Iy*gridDim.x+Ix] = Gradx;
   };
-  */
+*/
 };
 
 //-------------------------------------------------------

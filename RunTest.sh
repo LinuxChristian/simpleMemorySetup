@@ -97,10 +97,10 @@ function profile {
 	local RUNTIME=$( echo "$RESULT" | grep cu | awk --field-separator=" " '{print $2 }')
 	echo $RUNTIME
 
-	if [ $# -eq 3 ] && [ $TESTNO -ne 7 ]; then 
+	if [ $# -eq 3 ] && [ $TESTNO -ne 7 ] && [ $TESTNO -ne 8 ]; then 
 	    echo "$OFFSET $RUNTIME" >> $3
 	else
-	    echo "$RUNTIME" >> $3
+	    printf "%s \t " $RUNTIME >> $3
 	fi
     fi
 }
@@ -126,7 +126,7 @@ if [ $TESTNO -eq 0 ] || [ $TESTNO -eq 2 ]; then
     for OFFSET in `seq 0 2 32`
     do
 	echo "TESTING OFFSET $OFFSET"
-	CFLAGS="--Gridx 1000 --Offset $OFFSET"
+	CFLAGS="--Gridx 1000 --Blockx 1024 --Offset $OFFSET"
 	profile "./$EXEC $CFLAGS" 2 $OUTPUTFILE
     done
 fi
@@ -136,7 +136,7 @@ fi
 # Memory should still be coacelsed
 if [ $TESTNO -eq 0 ] || [ $TESTNO -eq 3 ]; then
     echo "TESTING WHEN NOT ALL THREADS COPY"
-    CFLAGS="--Gridx 1 --Min 36 --Max 45"
+    CFLAGS="--Min 36 --Max 45"
     profile "./$EXEC $CFLAGS" 1
 fi
 
@@ -179,7 +179,7 @@ if [ $TESTNO -eq 0 ] || [ $TESTNO -eq 6 ]; then
     OUTPUTFILE="MemCpyEffency.data"
     #printf "GDIM \t L1_HIT \t L1_MISS \t GLD_REQ \t GST_REQ \t GLOBAL_ST \n" > $OUTPUTFILE
     printf "THREADS \t LD_RATIO \t ST_RATIO \n" > $OUTPUTFILE
-    for GSIZE in `seq 1 10 200`
+    for GSIZE in `seq 1 1 30`
     do
 	echo "TESTING 1D GRID DIMENSIONS $GSIZE"
 	CFLAGS="--Gridx $GSIZE"
@@ -196,7 +196,7 @@ if [ $TESTNO -eq 0 ] || [ $TESTNO -eq 7 ]; then
     echo "RUNNING TEST 7 - TEST 5 WITH CHANGING DIMENSIONS AND PADDING"
 
     # Init flags
-    PROFFLAGS="$PROFFLAGS -u ms" # Set time unit to microseconds
+    PROFFLAGS="$PROFFLAGS -u s" # Set time unit to seconds
     GSIZE=128
     CFLAGS="--Gridx $GSIZE --Gridy $GSIZE --xdim 10000 --ydim 10000 -t 3"
 
@@ -215,19 +215,55 @@ if [ $TESTNO -eq 0 ] || [ $TESTNO -eq 7 ]; then
 
 	OUTPUTFILE="PaddingEffency.data"
 	OUTPUTFILE="$PADDINGSIZE$OUTPUTFILE"
-	printf "MEMSIZE \t TIME \n" > $OUTPUTFILE
-	for GSIZE in `seq 2 8 128` 
+	printf "MEMSIZE \t TIME  \n" > $OUTPUTFILE
+	for GSIZE in `seq 2 8 256` 
 	do
-	    echo "TESTING 1D GRID DIMENSIONS $GSIZE x $GSIZE"
+	    echo "TESTING GRID DIMENSIONS $GSIZE x $GSIZE"
 	    GDIM=$(echo "$GSIZE*32+100" | bc) # Note: Make grid a bit bigger
 	    CFLAGS="--Gridx $GSIZE --Gridy $GSIZE --xdim $GDIM --ydim $GDIM -t 3"
 	    echo $CFLAGS
 	    THREADS=$(echo "scale=2; $GSIZE*$GSIZE*32*32*8" | bc) # Note: 32x32 is the default threads pr. block * 8 bytes pr thread
 	    printf "%i \t " $THREADS >> $OUTPUTFILE
 	    profile "./$EXEC $CFLAGS" 2 $OUTPUTFILE
+
+	    # Read line and compute memory throughput
+	    TIME=$(cat $OUTPUTFILE | tail -n 1 | awk --field-separator=" " '{print $2 }' | perl -pi -e 's/e/*10^/') # Unit is important and bc does not know (e) exponant
+	    #THROUGHPUT=$(echo "scale=15; ($THREADS/(10^9))/($TIME)" | bc) # See CUDA Best Practice (2.2.2)
+	    echo "Runtime was $TIME" # and memory throughput was ${THROUGHPUT:0:5}"
+	    #printf "%s " $THROUGHPUT >> $OUTPUTFILE
+	    printf "\n" >> $OUTPUTFILE
 	done
 	echo $CFLAGS
 	# Just to show ratio
 	profile "./$EXEC $CFLAGS" 1
+    done
+fi
+
+# Run Test 8
+# A rerun of test 4 (Global memory access) but this time the runtime is 
+# extracted so it can be comparied with the shared runtime
+if [ $TESTNO -eq 0 ] || [ $TESTNO -eq 8 ]; then
+    echo "TESTING A SIMPLE FINITE DIFFERENCE STENCIL USING GLOBAL MEMORY AND DIFFERENT GRID SIZES"
+
+    # Init flags
+    PROFFLAGS="$PROFFLAGS -u s" # Set time unit to seconds
+    OUTPUTFILE="GlobalEffency.data"
+    printf "MEMSIZE \t TIME  \n" > $OUTPUTFILE
+
+    for GSIZE in `seq 2 8 256` 
+    do
+	echo "TESTING GRID DIMENSIONS $GSIZE x $GSIZE"
+	GDIM=$(echo "$GSIZE*32+100" | bc) # Note: Make grid a bit bigger
+	CFLAGS="--Gridx $GSIZE --Gridy $GSIZE --Blockx 32 --Blocky 32 --xdim $GDIM --ydim $GDIM -t 2"
+	echo $CFLAGS
+	THREADS=$(echo "scale=2; $GSIZE*$GSIZE*32*32*8" | bc) # Note: 32x32 is the default threads pr. block * 8 bytes pr thread
+	printf "%i \t " $THREADS >> $OUTPUTFILE
+	profile "./$EXEC $CFLAGS" 2 $OUTPUTFILE
+	
+	TIME=$(cat $OUTPUTFILE | tail -n 1 | awk --field-separator=" " '{print $2 }' | perl -pi -e 's/e/*10^/') # Unit is important and bc does not know (e) exponant
+	#THROUGHPUT=$(echo "scale=15; ($THREADS/(10^9))/($TIME)" | bc) # See CUDA Best Practice (2.2.2)
+	echo "Runtime was $TIME" # and memory throughput was ${THROUGHPUT:0:5}"
+	#printf "%s " $THROUGHPUT >> $OUTPUTFILE
+	printf "\n" >> $OUTPUTFILE
     done
 fi

@@ -63,6 +63,15 @@ Test 5 - Finite difference using shared memory
 
 The same stencil as in test 4 but now the vaules are extracted from shared memory. This means that the uncoalesced memory access is now to shared memory and the overhead should be reduced a lot.
 
+Test 6 - Different grid dimensions
+""""""""""""""""""""""""""""""""""""""""""""""
+
+From using the nvprof tool it was observed that for small problem the load and store ratios would be greater then expected. This test shows how the ratio changes with the number of memory copies.
+
+Test 7 - Changing grid sizes and padding settings
+""""""""""""""""""""""""""""""""""""""""""""""
+When using padding every block will load a redundant set of halo nodes. This transaction is dependent on the padding size of the halos. This test runs different grid sizes with and without padding. This should show the overhead of using padding and the drop in memory preformence by removing coaleasing in favor of the speed of shared memory. The shared memory size of forced to be 32 by 32 threads pr. block. A 30-by-30 tile of inner nodes can be used to compute the stencil (about ~90\% if the threads). On the other hand 4 times 32 threads (or 12.5\%) will be boundary nodes and only loads memory into shared. In the best case a boundary node will preform a L1 cache hit when loading memory.  
+
 Requirements
 ____________________
 
